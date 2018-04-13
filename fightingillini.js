@@ -8,8 +8,12 @@ const rp = require('request-promise-native');
 const util = require('util');
 const xml2js = require('xml2js');
 
+const package_json = require('./package.json');
+
+const USER_AGENT = `${package_json.name}/${package_json.version}`;
+
 const EVENTS_RSS_SCHEDULE = 'http://fightingillini.com/calendar.ashx/calendar.rss';
-const EVENT_TITLE_RE = /^(?:\d+\/\d+\s+(?:\d+:\d+\s+(?:AM|PM)\s+)?)?(?:\[.\]\s+)?(?:University\s+of\s+(?=Illinois))?(.+?)$/i;
+const EVENT_TITLE_RE = /^(?:\d+\/\d+\s+(?:\d+:\d+\s+(?:AM|PM)\s+)?)?(?:\[.\]\s+)?(?:University\s+of\s+(?=Illinois))?(.+)$/i;
 
 const SPORTS_BOTH = {
     'basketball': ['mens basketball', 'womens basketball'],
@@ -56,32 +60,24 @@ class RSSError extends Error {
 }
 
 async function getEvents(sportID, location) {
-    const response = await rp({
+    let response = await rp({
         uri: EVENTS_RSS_SCHEDULE,
         qs: {
             sport_id: (sportID || ''),
             han: (location || ''),
         },
         headers: {
-            'User-Agent': 'alexa-IlliniSpiritSkill/1.0',
+            'User-Agent': USER_AGENT,
         },
         resolveWithFullResponse: true,
     });
-    let data;
 
-    xml2js.parseString(
+    let data = await util.promisify(xml2js.parseString)(
         response.body,
         {
-            async: false,
             explicitRoot: true,
             explicitCharkey: false,
             explicitArray: false,
-        },
-        (xmlErr, xmlData) => {
-            if (xmlErr)
-                throw xmlErr;
-
-            data = xmlData;
         }
     );
 
@@ -116,7 +112,7 @@ async function getEvents(sportID, location) {
                 throw new Error('item is invalid');
 
             let title = item.title.trim();
-            const titleMatch = EVENT_TITLE_RE.exec(title);
+            let titleMatch = EVENT_TITLE_RE.exec(title);
             if (titleMatch)
                 title = titleMatch[1].trim();
 
