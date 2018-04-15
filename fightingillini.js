@@ -129,6 +129,18 @@ async function getEvents(sportID, location) {
         }
     }
 
+    // The events are probably returned sorted, but just to make sure...
+    events.sort((a, b) => {
+        const aTime = a.date.begin.getTime();
+        const bTime = b.date.begin.getTime();
+
+        if (aTime < bTime)
+            return -1;
+        else if (aTime > bTime)
+            return 1;
+        return 0
+    });
+
     return events;
 }
 
