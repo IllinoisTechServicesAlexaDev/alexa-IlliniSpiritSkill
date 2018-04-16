@@ -45,6 +45,60 @@ const SPORTS_NAME2ID = {
     'wrestling': 18,
 };
 
+const STATE_ABBR2NAME = new Map([
+    ['Alabama',             /\b(AL|Ala\.)(?=(\W|$))/],
+    ['Alaska',              /\b(AK|Alas\.)(?=\W|$)/],
+    ['Arizona',             /\b(AZ|Ariz\.)(?=\W|$)/],
+    ['Arkansas',            /\b(AR|Ark\.)(?=\W|$)/],
+    ['California',          /\b(CA|(?:Calif|Cal)\.)(?=\W|$)/],
+    ['Colorado',            /\b(CO|Colo?\.)(?=\W|$)/],
+    ['Connecticut',         /\b(CT|Conn\.)(?=\W|$)/],
+    ['Delaware',            /\b(DE|Del\.)(?=\W|$)/],
+    ['Washington D.C.',     /\b(DC|D\.C\.)(?=\W|$)/],
+    ['Florida',             /\b(FL|(?:Fla|Flor)\.)(?=\W|$)/],
+    ['Georgia',             /\b(GA|Ga\.)(?=\W|$)/],
+    ['Hawaii',              /\b(HI|H\.I\.)(?=\W|$)/],
+    ['Idaho',               /\b(ID|Ida?\.)(?=\W|$)/],
+    ['Illinois',            /\b(IL|Ill\.)(?=\W|$)/],
+    ['Indiana',             /\b(IN|Ind\.)(?=\W|$)/],
+    ['Iowa',                /\b(IA|Ia\.)(?=\W|$)/],
+    ['Kansas',              /\b(KS|Kans?\.)(?=\W|$)/],
+    ['Kentucky',            /\b(KY|(?:Ky|Kent?)\.)(?=\W|$)/],
+    ['Louisiana',           /\b(LA|La\.)(?=\W|$)/],
+    ['Maine',               /\b(ME|Me\.)(?=\W|$)/],
+    ['Maryland',            /\b(MD|Md\.)(?=\W|$)/],
+    ['Massachusetts',       /\b(MA|Mass\.)(?=\W|$)/],
+    ['Michigan',            /\b(MI|Mich\.)(?=\W|$)/],
+    ['Minnesota',           /\b(MN|Minn\.)(?=\W|$)/],
+    ['Mississippi',         /\b(MS|Miss\.)(?=\W|$)/],
+    ['Missouri',            /\b(MO|Mo\.)(?=\W|$)/],
+    ['Montana',             /\b(MT|Mont\.)(?=\W|$)/],
+    ['Nebraska',            /\b(NE|Nebr?\.)(?=\W|$)/],
+    ['Nevada',              /\b(NV|Nev\.)(?=\W|$)/],
+    ['New Hampshire',       /\b(NH|N\.H\.)(?=\W|$)/],
+    ['New Jersey',          /\b(NJ|N\.J\.)(?=\W|$)/],
+    ['New Mexico',          /\b(NM|N\.(?:\s*Mex|M)\.|New\s+M\.)(?=\W|$)/],
+    ['New York',            /\b(NY|N\.Y\.)(?=\W|$)/],
+    ['North Carolina',      /\b(NC|N\.C\.)(?=\W|$)/],
+    ['North Dakota',        /\b(ND|N\.(?:\s*Dak|D)\.)(?=\W|$)/],
+    ['Ohio',                /\b(OH|O\.)(?=\W|$)/],
+    ['Oklahoma',            /\b(OK|Okla\.)(?=\W|$)/],
+    ['Oregon',              /\b(OR|Oreg?\.)(?=\W|$)/],
+    ['Pennsylvania',        /\b(PA|(?:Pa|Penna?)\.)(?=\W|$)/],
+    ['Rhode Island',        /\b(RI|R\.I\.)(?=\W|$)/],
+    ['South Carolina',      /\b(SC|S\.C\.)(?=\W|$)/],
+    ['South Dakota',        /\b(SD|S\.(?:\s*Dak|D)\.)(?=\W|$)/],
+    ['Tennessee',           /\b(TN|Tenn\.)(?=\W|$)/],
+    ['Texas',               /\b(TX|Tex\.)(?=\W|$)/],
+    ['Utah',                /\b(UT)(?=\W|$)/],
+    ['Vermont',             /\b(VT|Vt\.)(?=\W|$)/],
+    ['Virginia',            /\b(VA|Va\.)(?=\W|$)/],
+    ['Washington',          /\b(WA|Wash\.)(?=\W|$)/],
+    ['West Virginia',       /\b(WV|W\.(?:\s*Va|V)\.)(?=\W|$)/],
+    ['Wisconsin',           /\b(WI|Wisc?\.)(?=\W|$)/],
+    ['Wyoming',             /\b(WY|Wyo\.)(?=\W|$)/],
+]);
+
 
 class RSSError extends Error {
     constructor(message, url) {
@@ -116,13 +170,24 @@ async function getEvents(sportID, location) {
             if (titleMatch)
                 title = titleMatch[1].trim();
 
+            let location = item['ev:location'] || '';
+            for (const [stateName, stateAbbr] of STATE_ABBR2NAME) {
+                if (stateAbbr.test(location)) {
+                    location = location.replace(stateAbbr, stateName);
+                    break;
+                }
+            }
+            // Somtimes the location gets repeated (???). Fix this
+            // case.
+            location = location.replace(/^\s*(.+?)\s*,\s+\1\s*$/, '$1');
+
             events.push({
                 'date': {
                     'begin': new Date(item['ev:startdate']),
                     'end': new Date(item['ev:enddate']),
                 },
                 'title': title,
-                'location': item['ev:location'],
+                'location': location.trim(),
             });
         } catch (itemErr) {
             console.warn('Exception thrown when constructing event (item = "%j"): %s', item, itemErr);
