@@ -4,9 +4,10 @@
 
 
 'use strict';
-const rp = require('request-promise-native');
-const util = require('util');
-const xml2js = require('xml2js');
+const debug = require('./debug.js')('fightingillini'),
+    rp = require('request-promise-native'),
+    util = require('util'),
+    xml2js = require('xml2js');
 
 const package_json = require('./package.json');
 
@@ -113,12 +114,32 @@ class RSSError extends Error {
     }
 }
 
-async function getEvents(sportID, han) {
+
+function _compareEvents(a, b) {
+    const aTime = a.date.begin.getTime();
+    const bTime = b.date.begin.getTime();
+
+    if (aTime < bTime)
+        return -1;
+    else if (aTime > bTime)
+        return 1;
+    return 0
+}
+
+async function _getEvents(sportID, han, sortEvents = true) {
+    sportID = (sportID || '');
+    han = (han || '');
+
+    debug('fetching events from %s?sport_id=%s&%han=%s',
+        EVENTS_RSS_SCHEDULE,
+        sportID,
+        han,
+    );
     let response = await rp({
         uri: EVENTS_RSS_SCHEDULE,
         qs: {
-            sport_id: (sportID || ''),
-            han: (han || ''),
+            sport_id: sportID,
+            han: han,
         },
         headers: {
             'User-Agent': USER_AGENT,
@@ -155,10 +176,12 @@ async function getEvents(sportID, han) {
     const events = [];
     for (const item of items) {
         try {
+            debug('processing item %v', item);
+
             let itemValid = true;
             for (const key of ['ev:startdate', 'ev:enddate', 'title']) {
                 if (!(key in item && item[key])) {
-                    console.warn('Missing required element %s for item.', key);
+                    debug('missing required element %s for item.', key);
                     itemValid = false;
                 }
             }
@@ -172,7 +195,9 @@ async function getEvents(sportID, han) {
 
             let location = item['ev:location'] || '';
             for (const [stateName, stateAbbr] of STATE_ABBR2NAME) {
-                if (stateAbbr.test(location)) {
+                const stateMatch = stateAbbr.exec(location);
+                if (stateMatch) {
+                    debug('replacing state abbr %s with %s', stateMatch[1], stateName);
                     location = location.replace(stateAbbr, stateName);
                     break;
                 }
@@ -190,42 +215,91 @@ async function getEvents(sportID, han) {
                 'location': location.trim(),
             });
         } catch (itemErr) {
-            console.warn('Exception thrown when constructing event (item = "%j"): %s', item, itemErr);
+            console.warn('exception thrown when constructing event: %s', itemErr);
         }
     }
 
     // The events are probably returned sorted, but just to make sure...
-    events.sort((a, b) => {
-        const aTime = a.date.begin.getTime();
-        const bTime = b.date.begin.getTime();
-
-        if (aTime < bTime)
-            return -1;
-        else if (aTime > bTime)
-            return 1;
-        return 0
-    });
+    if (sortEvents)
+        events.sort(_compareEvents);
 
     return events;
 }
 
-async function getAllEvents() {
-    return getEvents();
-}
-
-async function getNextEvent() {
-    const events = await getEvents();
-    const now = Date.now();
-
-    for (const event of events) {
-        if (event.date.begin.getTime() >= now)
-            return event;
+function _sportName2IDs(value) {
+    const rv = new Map();
+    if (!value) {
+        rv.set('', '');
+        return rv;
     }
 
-    return null;
+    const sportNames = (value in SPORTS_BOTH)
+        ? SPORTS_BOTH[value]
+        : [value];
+    for (const name of sportNames) {
+        if (name in SPORTS_NAME2ID)
+            rv.set(name, SPORTS_NAME2ID[name]);
+        else
+            console.warn('unable to map sport name %s to ID: does not exist', name);
+    }
+
+    return rv
 }
+
+/**
+ * Get all the events for a sport, by the sport name. This will return a Map
+ * keyed by sport name with values being an array of sorted events. If
+ * returning all sports then the key is ''.
+ *
+ * Note that multiple sports might be returned for a single name if it is a
+ * generic sport played by both genders.
+ */
+async function getAllEvents(sportName) {
+    const promises = [];
+    for (const sport of _sportName2IDs(sportName)) {
+        const _f = async () => {
+            const _events = await _getEvents(sport[1], '', true);
+            return [sport[0], _events];
+        };
+        promises.push(_f());
+    }
+
+    return new Map(await Promise.all(promises));
+}
+
+/**
+ * Get the next event for a sport, by the sport name. This will return a Map
+ * keyed by the sport name with values being the next event (or null if there
+ * are no more events). If returning an event for any sport then the key is ''.
+ *
+ * Note that multiple sports might be returned for a single name if it is a
+ * generic sport played by both genders.
+ */
+async function getNextEvents(sportName) {
+    const now = Date.now();
+
+    const promises = [];
+    for (const sport of _sportName2IDs(sportName)) {
+        const _f = async () => {
+            const _events = await _getEvents(sport[1], '', true);
+            for (const _event of _events) {
+                if (_event.date.begin.getTime() >= now) {
+                    debug('found next event for %s: %v', sport[0], _event);
+                    return [sport[0], _event];
+                }
+            }
+
+            debug('did not fing next event for %s', sport[0]);
+            return [sport[0], null];
+        }
+        promises.push(_f());
+    }
+
+    return new Map(await Promise.all(promises));
+}
+
 
 module.exports = {
     getAllEvents: getAllEvents,
-    getNextEvent: getNextEvent,
+    getNextEvents: getNextEvents,
 };

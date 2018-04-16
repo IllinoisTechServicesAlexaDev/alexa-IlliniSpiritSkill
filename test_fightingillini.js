@@ -2,13 +2,17 @@
 /* eslint quote-props: ["error", "consistent"]*/
 /* eslint no-throw-literal: "error"*/
 
-const fi = require('./fightingillini.js');
+const fi = require('./fightingillini.js'),
+    debug = require('./debug.js')('test_fightingillini');
 
 fi.getAllEvents()
     .then(events => {
-        console.log('Events Result: %j', events);
-        Array.from(new Set(events.map(event => event.location))).sort().forEach(location => {
-            console.log(`Location: ${location}`);
-        });
+        debug('Events Result: %v', events);
     })
     .catch(error => console.error('Events Error: %s', error));
+
+fi.getNextEvents('track and field')
+    .then(events => {
+        debug('Track and Field Result: %v', events);
+    })
+    .catch(error => console.error('Track and Field Error: %s', error));
