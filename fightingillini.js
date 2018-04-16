@@ -113,12 +113,12 @@ class RSSError extends Error {
     }
 }
 
-async function getEvents(sportID, location) {
+async function getEvents(sportID, han) {
     let response = await rp({
         uri: EVENTS_RSS_SCHEDULE,
         qs: {
             sport_id: (sportID || ''),
-            han: (location || ''),
+            han: (han || ''),
         },
         headers: {
             'User-Agent': USER_AGENT,
@@ -209,11 +209,23 @@ async function getEvents(sportID, location) {
     return events;
 }
 
-function getAllEvents() {
+async function getAllEvents() {
     return getEvents();
 }
 
+async function getNextEvent() {
+    const events = await getEvents();
+    const now = Date.now();
+
+    for (const event of events) {
+        if (event.date.begin.getTime() >= now)
+            return event;
+    }
+
+    return null;
+}
 
 module.exports = {
     getAllEvents: getAllEvents,
+    getNextEvent: getNextEvent,
 };
