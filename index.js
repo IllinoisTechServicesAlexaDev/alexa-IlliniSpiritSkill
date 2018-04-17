@@ -3,12 +3,14 @@
 /* eslint no-throw-literal: "error"*/
 
 'use strict';
-const Alexa = require('alexa-sdk');
+const debug = require('./debug.js')('index'),
+    Alexa = require('alexa-sdk');
 
 const APP_ID = 'amzn1.ask.skill.ebff67a3-eae9-4452-9a6a-74196ee1f419';
+const APP_DYNAMODB = 'alexa-IlliniSpiritSkill-SessionAttributes';
 
 const SKILL_NAME = 'Illini Spirit';
-const HELP_MESSAGE = 'Hail Alma Mater. You can say i.l.l. or i.n.i, or, you can ask me to sing, or, you can ask about illini blood, or, you can say exit... show me your school spirit!';
+const HELP_MESSAGE = 'Hail Alma Mater. You can say i.l.l. or i.n.i, or, you can ask me to sing, or, you can ask about upcoming events, or, you can say exit... show me your school spirit!';
 const HELP_REPROMPT = 'Show me your school spirit!';
 const STOP_MESSAGE = 'Go Illini!';
 
@@ -58,7 +60,16 @@ const handlers = {
     },
 
     'SingIntent': function () {
-        let song = SONGS[ Math.floor( Math.random() * SONGS.length) ];
+        // Record what songs we haven't used so the user doesn't get the same
+        // one over and over again.
+        let songs = this.attributes['songs'];
+        if (!songs || !songs.length)
+            songs = this.attributes['songs'] = SONGS.slice();
+
+        const songIndex = Math.floor(Math.random() * songs.length);
+        const song = songs[songIndex];
+        songs.splice(songIndex, 1);
+
         this.emit(':tell', song);
     },
 
@@ -74,18 +85,15 @@ const handlers = {
         const speechOutput = HELP_MESSAGE;
         const reprompt = HELP_REPROMPT;
 
-        this.response.speak(speechOutput).listen(reprompt);
-        this.emit(':responseReady');
+        this.emit(':ask', HELP_MESSAGE, HELP_REPROMPT);
     },
 
     'AMAZON.CancelIntent': function () {
-        this.response.speak(STOP_MESSAGE);
-        this.emit(':responseReady');
+        this.emit(':tell', STOP_MESSAGE);
     },
 
     'AMAZON.StopIntent': function () {
-        this.response.speak(STOP_MESSAGE);
-        this.emit(':responseReady');
+        this.emit(':tell', STOP_MESSAGE);
     },
 };
 
@@ -93,6 +101,7 @@ exports.handler = (event, context, callback) => {
     const alexa = Alexa.handler(event, context, callback);
 
     alexa.APP_ID = APP_ID;
+    alexa.dynamoDBTableName = APP_DYNAMODB;
     alexa.registerHandlers(handlers);
     alexa.execute();
 };
