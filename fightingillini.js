@@ -16,35 +16,35 @@ const USER_AGENT = `${package_json.name}/${package_json.version}`;
 const EVENTS_RSS_SCHEDULE = 'http://fightingillini.com/calendar.ashx/calendar.rss';
 const EVENT_TITLE_RE = /^(?:\d+\/\d+\s+(?:\d+:\d+\s+(?:AM|PM)\s+)?)?(?:\[.\]\s+)?(?:University\s+of\s+(?=Illinois))?(.+)$/i;
 
-const SPORTS_BOTH = {
-    'basketball': ['mens basketball', 'womens basketball'],
-    'cross country': ['mens cross country', 'womens cross country'],
-    'golf': ['mens golf', 'womens golf'],
-    'gymnastics': ['mens gymnastics', 'womens gymnastics'],
-    'tennis': ['mens tennis', 'womens tennis'],
-    'track and field': ['mens track and field', 'womens track and field'],
-};
-const SPORTS_NAME2ID = {
-    'baseball': 1,
-    'football': 2,
-    'mens basketball': 5,
-    'mens cross country': 25,
-    'mens golf': 16,
-    'mens gymnastics': 6,
-    'mens tennis': 7,
-    'mens track and field': 28,
-    'soccer': 13,
-    'softball': 9,
-    'swim and dive': 14,
-    'volleyball': 17,
-    'womens basketball': 10,
-    'womens cross country': 26,
-    'womens golf': 11,
-    'womens gymnastics': 12,
-    'womens tennis': 15,
-    'womens track and field': 27,
-    'wrestling': 18,
-};
+const SPORTS_BOTH = new Map([
+    ['basketball',      ['mens basketball', 'womens basketball']],
+    ['cross country',   ['mens cross country', 'womens cross country']],
+    ['golf',            ['mens golf', 'womens golf']],
+    ['gymnastics',      ['mens gymnastics', 'womens gymnastics']],
+    ['tennis',          ['mens tennis', 'womens tennis']],
+    ['track and field', ['mens track and field', 'womens track and field']],
+]);
+const SPORTS_NAME2ID = new Map([
+    ['baseball',                1],
+    ['football',                2],
+    ['mens basketball',         5],
+    ['mens cross country',      25],
+    ['mens golf',               16],
+    ['mens gymnastics',         6],
+    ['mens tennis',             7],
+    ['mens track and field',    28],
+    ['soccer',                  13],
+    ['softball',                9],
+    ['swim and dive',           14],
+    ['volleyball',              17],
+    ['womens basketball',       10],
+    ['womens cross country',    26],
+    ['womens golf',             11],
+    ['womens gymnastics',       12],
+    ['womens tennis',           15],
+    ['womens track and field',  27],
+    ['wrestling',               18],
+]);
 
 const STATE_ABBR2NAME = new Map([
     ['Alabama',             /\b(AL|Ala\.)(?=(\W|$))/],
@@ -233,12 +233,12 @@ function _sportName2IDs(value) {
         return rv;
     }
 
-    const sportNames = (value in SPORTS_BOTH)
-        ? SPORTS_BOTH[value]
+    const sportNames = SPORTS_BOTH.has(value)
+        ? SPORTS_BOTH.get(value)
         : [value];
     for (const name of sportNames) {
-        if (name in SPORTS_NAME2ID)
-            rv.set(name, SPORTS_NAME2ID[name]);
+        if (SPORTS_NAME2ID.has(name))
+            rv.set(name, SPORTS_NAME2ID.get(name));
         else
             console.warn('unable to map sport name %s to ID: does not exist', name);
     }
