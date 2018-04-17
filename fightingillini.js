@@ -298,8 +298,15 @@ async function getNextEvents(sportName) {
     return new Map(await Promise.all(promises));
 }
 
+/**
+ * Check if the name is a sport that we know about. Returns true or false.
+ */
+function isSport(sportName) {
+    return SPORTS_NAME2ID.has(sportName) || SPORTS_BOTH.has(sportName);
+}
 
 module.exports = {
     getAllEvents: getAllEvents,
     getNextEvents: getNextEvents,
+    isSport: isSport,
 };
