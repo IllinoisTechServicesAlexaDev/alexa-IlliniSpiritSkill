@@ -5,8 +5,10 @@
   "dependencies": {
     "alexa-sdk": "^1.0.25",
     "debug": "^3.1.0",
+    "moment-timezone": "^0.5.14",
     "request": "^2.85.0",
     "request-promise-native": "^1.0.5",
-    "xml2js": "^0.4.17"
+    "xml2js": "^0.4.17",
+    "xml-escape": "^1.1.0"
   }
 }

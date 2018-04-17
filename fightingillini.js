@@ -215,7 +215,7 @@ async function _getEvents(sportID, han, sortEvents = true) {
                 'location': location.trim(),
             });
         } catch (itemErr) {
-            console.warn('exception thrown when constructing event: %s', itemErr);
+            console.trace('exception thrown when constructing event: %s', itemErr);
         }
     }
 
@@ -301,12 +301,12 @@ async function getNextEvents(sportName) {
 /**
  * Check if the name is a sport that we know about. Returns true or false.
  */
-function isSport(sportName) {
-    return SPORTS_NAME2ID.has(sportName) || SPORTS_BOTH.has(sportName);
+function hasSport(sportName) {
+    return !sportName || SPORTS_NAME2ID.has(sportName) || SPORTS_BOTH.has(sportName);
 }
 
 module.exports = {
     getAllEvents: getAllEvents,
     getNextEvents: getNextEvents,
-    isSport: isSport,
+    hasSport: hasSport,
 };
