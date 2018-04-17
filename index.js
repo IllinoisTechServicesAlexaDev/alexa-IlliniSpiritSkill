@@ -12,6 +12,7 @@ const debug = require('./debug.js')('index'),
 const APP_ID = 'amzn1.ask.skill.ebff67a3-eae9-4452-9a6a-74196ee1f419';
 const APP_DYNAMODB = 'alexa-IlliniSpiritSkill-SessionAttributes';
 const APP_TIMEZONE = 'America/Chicago';
+const APP_TIMEZONE_NAME = 'Central';
 
 const SKILL_NAME = 'Illini Spirit';
 const HELP_MESSAGE = 'Hail Alma Mater. You can say i.l.l. or i.n.i, or, you can ask me to sing, or, you can ask about upcoming events, or, you can say exit... show me your school spirit!';
@@ -128,7 +129,7 @@ const handlers = {
             let _eventOutput = `I wasn't able to find any upcoming events for ${_sportName}.`;
             if (_event) {
                 const _eventBegin = moment.tz(_event.date.begin, APP_TIMEZONE)
-                    .format('[on] dddd, MMMM Do, [at] hh:mm A');
+                    .format(`[on] dddd, MMMM Do, [at] hh:mm A [${APP_TIMEZONE_NAME}]`);
 
                 _eventOutput = `The next ${_sportName} event is ${_eventBegin}, ${_event.title}`;
                 if (_event.location)
