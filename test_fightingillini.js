@@ -11,7 +11,7 @@ fi.getAllEvents()
     })
     .catch(error => console.error('Events Error: %s', error));
 
-fi.getNextEvents('track and field')
+fi.getNextEvents('TRACK_AND_FIELD')
     .then(events => {
         debug('Track and Field Result: %v', events);
     })
