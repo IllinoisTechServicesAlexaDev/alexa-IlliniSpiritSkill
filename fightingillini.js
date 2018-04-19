@@ -7,13 +7,16 @@
 const _createDebug = require('./debug.js'),
     rp = require('request-promise-native'),
     util = require('util'),
-    xml2js = require('xml2js');
+    xml2js = require('xml2js'),
+    AWS = require('aws-sdk');
 
 const debug = _createDebug('fightingillini');
+const dynamoDB = new AWS.DynamoDB({apiVersion: '2012-08-10'});
 const package_json = require('./package.json');
 
 const USER_AGENT = `${package_json.name}/${package_json.version}`;
 
+const EVENTS_DB_TABLE_NAME = 'alexa-IlliniSpiritSkil-FightingIllini';
 const EVENTS_RSS_SCHEDULE = 'http://fightingillini.com/calendar.ashx/calendar.rss';
 const EVENT_TITLE_RE = /^(?:\d+\/\d+\s+(?:\d+:\d+\s+(?:AM|PM)\s+)?)?(?:\[.\]\s+)?(?:University\s+of\s+(?=Illinois))?(.+)$/i;
 
@@ -116,8 +119,57 @@ class RSSError extends Error {
 }
 
 class Event {
-    static fromRSSItem(item, han = null) {
-        this.debug('processing item %v', item);
+    static compare(a, b) {
+        const [aBeginTime, bBeginTime] =
+            [a.date.begin.getTime(), b.date.begin.getTime()];
+
+        if (aBeginTime < bBeginTime)
+            return -1;
+        else if (aBeginTime > bBeginTime)
+            return 1;
+
+        return 0;
+    }
+
+    static fromDBItem(dbItem) {
+        this.debug('processing db item %v', dbItem);
+
+        const item = Object.assign({}, dbItem);
+        for (const key of Object.getOwnPropertyNames(item))
+            item[key] = _unmarshalDBValue(item[key]);
+
+        let itemValid = true;
+        for (const key of ['SportName', 'DateBegin', 'DateEnd', 'Title', 'GUID']) {
+            if (!(key in item && item[key])) {
+                this.debug('missing required element %s for item.', key);
+                itemValid = false;
+            }
+        }
+        if (!itemValid)
+            throw new Error('db item is invalid');
+
+        const event = new this();
+        event.sportName = item.SportName;
+        event.guid = item.GUID;
+        event.date = {
+            'begin': new Date(item.DateBegin),
+            'end': new Date(item.DateEnd),
+        };
+        event.title = item.Title;
+        event.location = item.Location;
+        event.description = item.Description;
+        event.link = item.Link;
+        event.logo = {
+            'team': item.LogoTeam,
+            'opponent': item.LogoOpponent,
+        };
+        event.han = item.HAN;
+
+        return event;
+    }
+
+    static fromRSSItem(item, sportName, han = null) {
+        this.debug('processing rss item (%s, %O) %v', sportName, han, item);
 
         let itemValid = true;
         for (const key of ['ev:startdate', 'ev:enddate', 'title', 'guid']) {
@@ -127,7 +179,7 @@ class Event {
             }
         }
         if (!itemValid)
-            throw new Error('item is invalid');
+            throw new Error('rss item is invalid');
 
         let title = item.title.trim();
         let titleMatch = EVENT_TITLE_RE.exec(title);
@@ -153,6 +205,7 @@ class Event {
             guid = guid._;
 
         const event = new this();
+        event.sportName = sportName;
         event.guid = guid;
         event.date = {
             'begin': new Date(item['ev:startdate']),
@@ -170,67 +223,69 @@ class Event {
 
         return event;
     }
+
+    static isEqual(a, b) {
+        if (a === b)
+            return true;
+        if (!a || !b)
+            return false;
+
+        if (a.description.length != b.description.length)
+            return false;
+        if (a.description !== b.description) {
+            for (let idx = 0; idx < a.description.length; idx++)
+                if (a.description[idx] !== b.description[idx])
+                    return false;
+        }
+
+        return (
+            a.guid === b.guid &&
+            a.date.begin.getTime() === b.date.begin.getTime() &&
+            a.date.end.getTime() === b.date.end.getTime() &&
+            a.title === b.title &&
+            a.location === b.location &&
+            a.link === b.link &&
+            a.logo.team === b.logo.team &&
+            a.logo.opponent === b.logo.opponent &&
+            a.han === b.han
+        );
+    }
+
+
+    toDBItem() {
+        const item = {
+            SportName: this.sportName,
+            GUID: this.guid,
+            Title: this.title,
+            Location: this.location,
+            Description: this.description,
+            Link: this.link,
+            LogoTeam: this.logo.team,
+            LogoOpponent: this.logo.opponent,
+            HAN: this.han,
+        };
+
+        for (const k of Object.getOwnPropertyNames(item))
+            item[k] = _marshalDBValue(item[k]);
+
+        item.DateBegin = _marshalDBValue(this.date.begin, 'N');
+        item.DateEnd = _marshalDBValue(this.date.end, 'N');
+
+        return item;
+    }
+
+    toDBKey() {
+        return {
+            SportName: _marshalDBValue(this.sportName),
+            DateBegin: _marshalDBValue(this.date.begin, 'N'),
+        };
+    }
 }
 
 Event.debug = _createDebug('fightingillini:Event');
 
-function _unmarshalDBValue(value) {
-    for (const type in ['S', 'N', 'B']) {
-        if (type in value)
-            return value[type];
-    }
 
-    for (const type in ['SS', 'NS', 'BS']) {
-        if (type in value)
-            return Set(value[type]);
-    }
-
-    if ('M' in value) {
-        const rv = {};
-        for (const prop in value.M.getOwnPropertyNames())
-            rv[prop] = _unmarshalDBValue(value.M[prop]);
-        return rv;
-    } else if ('L' in value)
-        return value.L.map(v => _unmarshalDBValue(v))
-    else if (value.NULL)
-        return null;
-    else if ('BOOL' in value)
-        return value.BOOL;
-
-    throw new Error('unknown value type for %s', util.inspect(value));
-}
-
-function _compareEvents(a, b) {
-    const [aBeginTime, bBeginTime] =
-        [a.date.begin.getTime(), b.date.begin.getTime()];
-
-    if (aBeginTime < bBeginTime)
-        return -1;
-    else if (aBeginTime > bBeginTime)
-        return 1;
-
-    return 0;
-}
-
-function _isEqualEvents(a, b) {
-    if (!a || !b)
-        return false;
-
-    return (
-        a.guid === b.guid &&
-        a.date.begin.getTime() === b.date.begin.getTime() &&
-        a.date.end.getTime() === b.date.end.getTime() &&
-        a.title === b.title &&
-        a.location === b.location &&
-        a.description === b.description &&
-        a.link === b.link &&
-        a.logo.team === b.logo.team &&
-        a.logo.opponent === b.logo.opponent &&
-        a.han === b.han
-    );
-}
-
-function _buildEventsFromJSON(data, han = null) {
+function _buildEventsFromJSON(data, sportName, han) {
     // Required RSS elements for this to work
     if (!data)
         throw new RSSError('no rss data', EVENTS_RSS_SCHEDULE);
@@ -251,7 +306,7 @@ function _buildEventsFromJSON(data, han = null) {
     const events = [];
     for (const item of items) {
         try {
-            events.push(Event.fromRSSItem(item));
+            events.push(Event.fromRSSItem(item, sportName, han));
         } catch (itemErr) {
             console.trace('exception thrown when constructing event: %s', itemErr);
         }
@@ -260,11 +315,195 @@ function _buildEventsFromJSON(data, han = null) {
     return events;
 }
 
-async function _getEventsFromDB() {
+function _marshalDBValue(value, typeHint = 'S') {
+    const valueType = typeof(value);
 
+    if (value === null)
+        return { 'NULL': true };
+    else if (valueType == 'boolean')
+        return { 'BOOL': value };
+    else if (valueType == 'number')
+        return { 'N': value.toString() };
+    else if (valueType == 'string')
+        return { 'S': value };
+    else if (valueType == 'object') {
+        if (value instanceof Date) {
+            if (typeHint == 'N')
+                return { 'N': value.getTime().toString() };
+            else
+                return { 'S': value.toISOString() };
+        } else if (value instanceof Set) {
+            const s = {};
+            s[`${typeHint}S`] = Array.from(value.values());
+
+            return s;
+        } else if (Array.isArray(value))
+            return { 'L': value.map(v => _marshalDBValue(v)) };
+        else if (value instanceof TypedArray || value instanceof ArrayBuffer || value instanceof SharedArrayBuffer || value instanceof Buffer)
+            return { 'B': value };
+        else if (value instanceof Map) {
+            const m = {};
+            for (const [k, v] of value)
+                m[k] = _marshalDBValue(v);
+            return { 'M': m };
+        } else {
+            const m = {};
+            for (const k of Object.getOwnPropertyNames(value))
+                m[k] = _marshalDBValue(value[k]);
+            return { 'M': m };
+        }
+    }
+
+    throw new Error('unknown object type: ' + util.inspect(value));
 }
-async function _getEventsFromRSS(sportName, hanValues = ['H', 'A', 'N']) {
+
+function _sportNameExpand(value) {
+    if (!value)
+        return SPORTS_NAME2ID.keys();
+    else if (SPORTS_BOTH.has(value))
+        return SPORTS_BOTH.get(value);
+    else
+        return value;
+}
+
+function _unmarshalDBValue(value) {
+    for (const dbType of ['S', 'N', 'B']) {
+        if (dbType in value)
+            return (dbType == 'N') ? Number.parseFloat(value[dbType]) : value[dbType];
+    }
+
+    for (const dbType of ['SS', 'NS', 'BS']) {
+        if (dbType in value) {
+            let v = value[dbType];
+            if (dbType == 'NS')
+                v = v.map(v => Number.parseFloat(v));
+            return new Set(v);
+        }
+    }
+
+    if ('M' in value) {
+        const rv = {};
+        for (const prop in Object.getOwnPropertyNames(value.M))
+            rv[prop] = _unmarshalDBValue(value.M[prop]);
+        return rv;
+    } else if ('L' in value)
+        return value.L.map(v => _unmarshalDBValue(v))
+    else if (value.NULL)
+        return null;
+    else if ('BOOL' in value)
+        return value.BOOL;
+
+    throw new Error('unknown value type: ' + util.inspect(value));
+}
+
+
+async function _getEventsFromDB(sportName, hanValues = null, sortEvents = false) {
+    hanValues = hanValues || ['H', 'A', 'N'];
+
+    const events = [];
+    const callback = items => {
+        for (const item of items) {
+            try {
+                events.push(Event.fromDBItem(item));
+            } catch (itemErr) {
+                console.trace('exception thrown when constructing event: %s', itemErr);
+            }
+        }
+    };
+
+    if (sportName)
+        await _getEventsFromDB_Query(sportName, hanValues, callback);
+    else
+        await _getEventsFromDB_Scan(hanValues, callback);
+
+    if (sortEvents)
+        events.sort(Event.compare);
+
+    return events;
+}
+
+async function _getEventsFromDB_Scan(hanValues, callback) {
+    let lastEvaluatedKey = null;
+
+    const filterExpr = util.format(
+        'HAN in (%s)',
+        hanValues.map((v, vIdx) => `:hanVal${vIdx}`).join(', '),
+    );
+
+    const exprAttrVals = {};
+    hanValues.forEach((v, vIdx) => {
+        exprAttrVals[`:hanVal${vIdx}`] = _marshalDBValue(v);
+    });
+
+    do {
+        var params = {
+            TableName: EVENTS_DB_TABLE_NAME,
+            Select: 'ALL_ATTRIBUTES',
+
+            ExpressionAttributeValues: exprAttrVals,
+            FilterExpression: filterExpr,
+        };
+        if (lastEvaluatedKey) {
+            params['ExclusiveStartKey'] = lastEvaluatedKey;
+            lastEvaluatedKey = null;
+        }
+
+        try {
+            const data = await dynamoDB.scan(params).promise();
+            if (data.LastEvaluatedKey)
+                lastEvaluatedKey = data.LastEvaluatedKey;
+
+            callback(data.Items || []);
+        } catch (dbErr) {
+            console.trace('exception thrown getting items from the database: %s', dbErr);
+        }
+    } while (lastEvaluatedKey);
+}
+
+async function _getEventsFromDB_Query(sportName, hanValues, callback) {
+    let lastEvaluatedKey = null;
+
+    const filterExpr = util.format(
+        'HAN in (%s)',
+        hanValues.map((v, vIdx) => `:hanVal${vIdx}`).join(', '),
+    );
+
+    const exprAttrVals = {
+        ':sportName': _marshalDBValue(sportName),
+    };
+    hanValues.forEach((v, vIdx) => {
+        exprAttrVals[`:hanVal${vIdx}`] = _marshalDBValue(v);
+    });
+
+    do {
+        var params = {
+            TableName: EVENTS_DB_TABLE_NAME,
+            Select: 'ALL_ATTRIBUTES',
+
+            ExpressionAttributeValues: exprAttrVals,
+            KeyConditionExpression: 'SportName = :sportName',
+            FilterExpression: filterExpr,
+        };
+        if (lastEvaluatedKey) {
+            params['ExclusiveStartKey'] = lastEvaluatedKey;
+            lastEvaluatedKey = null;
+        }
+
+        try {
+            const data = await dynamoDB.query(params).promise();
+            if (data.LastEvaluatedKey)
+                lastEvaluatedKey = data.LastEvaluatedKey;
+
+            callback(data.Items || []);
+        } catch (dbErr) {
+            console.trace('exception thrown getting items from the database: %s', dbErr);
+        }
+    } while (lastEvaluatedKey);
+}
+
+async function _getEventsFromRSS(sportName, hanValues = null, sortEvents = false) {
     const sportID = SPORTS_NAME2ID.get(sportName);
+    hanValues = hanValues || ['H', 'A', 'N'];
 
     let responses;
     {
@@ -324,81 +563,69 @@ async function _getEventsFromRSS(sportName, hanValues = ['H', 'A', 'N']) {
                 throw hanJSON;
 
             if (hanJSON)
-                events.push(..._buildEventsFromJSON(hanJSON, hanValue));
+                events.push(..._buildEventsFromJSON(hanJSON, sportName, hanValue));
         } catch (hanErr) {
             console.trace('exception building events from JSON: %s', hanErr);
         }
     });
 
-    return events;
-}
-
-async function _getEvents(sportID, han, sortEvents = true) {
-    sportID = (sportID || '');
-    han = (han || '');
-
-    debug('fetching events from %s?sport_id=%s&%han=%s',
-        EVENTS_RSS_SCHEDULE,
-        sportID,
-        han,
-    );
-    let response = await rp({
-        uri: EVENTS_RSS_SCHEDULE,
-        qs: {
-            sport_id: sportID,
-            han: han,
-        },
-        headers: {
-            'User-Agent': USER_AGENT,
-        },
-        resolveWithFullResponse: true,
-    });
-
-    let data = await util.promisify(xml2js.parseString)(
-        response.body,
-        {
-            async: true,
-            explicitRoot: true,
-            explicitCharkey: false,
-            explicitArray: false,
-        }
-    );
-
-    // The events are probably returned sorted, but just to make sure...
-    const events = _buildEventsFromJSON(data);
     if (sortEvents)
-        events.sort(_compareEvents);
-
+        events.sort(Event.compare);
     return events;
 }
 
-function _sportNameExpand(value) {
-    if (!value)
-        return SPORTS_NAME2ID.keys();
-    else if (SPORTS_BOTH.has(value))
-        return SPORTS_BOTH.get(value);
-    else
-        return value;
-}
-
-function _sportName2IDs(value) {
-    const rv = new Map();
-    if (!value) {
-        rv.set('', '');
-        return rv;
+async function _syncDBEvents() {
+    const rssEvents = new Map();
+    {
+        const promises = [];
+        for (const _name of _sportNameExpand('')) {
+            promises.push(_getEventsFromRSS(_name));
+        }
+        const _promiseEvents = await Promise.all(promises);
+        for (const _events of _promiseEvents)
+            for (const _event of _events)
+                rssEvents.set(_event.guid, _event);
+        debug('sync fetched rss events: %v', rssEvents);
     }
 
-    const sportNames = SPORTS_BOTH.has(value)
-        ? SPORTS_BOTH.get(value)
-        : [value];
-    for (const name of sportNames) {
-        if (SPORTS_NAME2ID.has(name))
-            rv.set(name, SPORTS_NAME2ID.get(name));
-        else
-            console.warn('unable to map sport name %s to ID: does not exist', name);
+    const dbEvents = new Map();
+    {
+        const _events = await _getEventsFromDB();
+        for (const _event of _events)
+            dbEvents.set(_event.guid, _event);
+        debug('sync fetched db events: %v', dbEvents);
     }
 
-    return rv
+    const writeOps = [];
+    for (const event of rssEvents.values()) {
+        if (!dbEvents.has(event.guid) || !Event.isEqual(event, dbEvents.get(event.guid)))
+            writeOps.push({
+                PutRequest: { Item: event.toDBItem() },
+            });
+    }
+    for (const event of dbEvents.values()) {
+        if (!rssEvents.has(event.guid))
+            writeOps.push({
+                DeleteRequest: { Key: event.toDBKey() },
+            });
+    }
+
+    debug('performing sync with writeOps: %v', writeOps);
+    while (writeOps.length) {
+        let batchWriteOps = writeOps.splice(0, 25);
+        while (batchWriteOps.length) {
+            const params = {
+                RequestItems: {},
+            };
+            params.RequestItems[EVENTS_DB_TABLE_NAME] = batchWriteOps;
+            batchWriteOps = [];
+
+            debug('doing batch write with params: %v', params);
+            const result = await dynamoDB.batchWriteItem(params).promise();
+            if (result.UnprocessedItems && result.UnprocessedItems[EVENTS_DB_TABLE_NAME])
+                batchWriteOps = result.UnprocessedItems[EVENTS_DB_TABLE_NAME];
+        }
+    }
 }
 
 /**
@@ -411,10 +638,10 @@ function _sportName2IDs(value) {
  */
 async function getAllEvents(sportName) {
     const promises = [];
-    for (const sport of _sportName2IDs(sportName)) {
+    for (const _name of _sportNameExpand(sportName)) {
         const _f = async () => {
-            const _events = await _getEvents(sport[1], '', true);
-            return [sport[0], _events];
+            const _events = await _getEventsFromDB(_name, null, true);
+            return [_name, _events];
         };
         promises.push(_f());
     }
@@ -434,18 +661,18 @@ async function getNextEvents(sportName) {
     const now = Date.now();
 
     const promises = [];
-    for (const sport of _sportName2IDs(sportName)) {
+    for (const _name of _sportNameExpand(sportName)) {
         const _f = async () => {
-            const _events = await _getEvents(sport[1], '', true);
+            const _events = await _getEventsFromDB(_name, null, true);
             for (const _event of _events) {
                 if (_event.date.begin.getTime() >= now) {
-                    debug('found next event for %s: %v', sport[0], _event);
-                    return [sport[0], _event];
+                    debug('found next event for %s: %v', _name, _event);
+                    return [_name, _event];
                 }
             }
 
-            debug('did not fing next event for %s', sport[0]);
-            return [sport[0], null];
+            debug('did not fing next event for %s', _name);
+            return [_name, null];
         }
         promises.push(_f());
     }
@@ -461,7 +688,11 @@ function hasSport(sportName) {
 }
 
 module.exports = {
+    _Event: Event,
+    _getEventsFromDB: _getEventsFromDB,
     _getEventsFromRSS: _getEventsFromRSS,
+    _syncDBEvents: _syncDBEvents,
+
     getAllEvents: getAllEvents,
     getNextEvents: getNextEvents,
     hasSport: hasSport,
