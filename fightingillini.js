@@ -4,11 +4,12 @@
 
 
 'use strict';
-const debug = require('./debug.js')('fightingillini'),
+const _createDebug = require('./debug.js'),
     rp = require('request-promise-native'),
     util = require('util'),
     xml2js = require('xml2js');
 
+const debug = _createDebug('fightingillini');
 const package_json = require('./package.json');
 
 const USER_AGENT = `${package_json.name}/${package_json.version}`;
@@ -114,16 +115,222 @@ class RSSError extends Error {
     }
 }
 
+class Event {
+    static fromRSSItem(item, han = null) {
+        this.debug('processing item %v', item);
+
+        let itemValid = true;
+        for (const key of ['ev:startdate', 'ev:enddate', 'title', 'guid']) {
+            if (!(key in item && item[key])) {
+                this.debug('missing required element %s for item.', key);
+                itemValid = false;
+            }
+        }
+        if (!itemValid)
+            throw new Error('item is invalid');
+
+        let title = item.title.trim();
+        let titleMatch = EVENT_TITLE_RE.exec(title);
+        if (titleMatch)
+            title = titleMatch[1].trim();
+
+        let location = item['ev:location'] || '';
+        for (const [stateName, stateAbbr] of STATE_ABBR2NAME) {
+            const stateMatch = stateAbbr.exec(location);
+            if (stateMatch) {
+                this.debug('replacing state abbr %s with %s', stateMatch[1], stateName);
+                location = location.replace(stateAbbr, stateName);
+                break;
+            }
+        }
+        // Somtimes the location gets repeated (???). Fix this
+        // case.
+        location = location.replace(/^\s*(.+?)\s*,\s+\1\s*$/, '$1');
+
+        let description = (item['description'] || '').split(/\\n/).map(line => line.trim());
+        let guid = item['guid'];
+        if (guid.hasOwnProperty('_'))
+            guid = guid._;
+
+        const event = new this();
+        event.guid = guid;
+        event.date = {
+            'begin': new Date(item['ev:startdate']),
+            'end': new Date(item['ev:enddate']),
+        };
+        event.title = title;
+        event.location = location.trim();
+        event.description = description;
+        event.link = (item['link'] || null);
+        event.logo = {
+            'team': (item['s:teamlogo'] || null),
+            'opponent': (item['s:opponentlogo'] || null),
+        };
+        event.han = han;
+
+        return event;
+    }
+}
+
+Event.debug = _createDebug('fightingillini:Event');
+
+function _unmarshalDBValue(value) {
+    for (const type in ['S', 'N', 'B']) {
+        if (type in value)
+            return value[type];
+    }
+
+    for (const type in ['SS', 'NS', 'BS']) {
+        if (type in value)
+            return Set(value[type]);
+    }
+
+    if ('M' in value) {
+        const rv = {};
+        for (const prop in value.M.getOwnPropertyNames())
+            rv[prop] = _unmarshalDBValue(value.M[prop]);
+        return rv;
+    } else if ('L' in value)
+        return value.L.map(v => _unmarshalDBValue(v))
+    else if (value.NULL)
+        return null;
+    else if ('BOOL' in value)
+        return value.BOOL;
+
+    throw new Error('unknown value type for %s', util.inspect(value));
+}
 
 function _compareEvents(a, b) {
-    const aTime = a.date.begin.getTime();
-    const bTime = b.date.begin.getTime();
+    const [aBeginTime, bBeginTime] =
+        [a.date.begin.getTime(), b.date.begin.getTime()];
 
-    if (aTime < bTime)
+    if (aBeginTime < bBeginTime)
         return -1;
-    else if (aTime > bTime)
+    else if (aBeginTime > bBeginTime)
         return 1;
-    return 0
+
+    return 0;
+}
+
+function _isEqualEvents(a, b) {
+    if (!a || !b)
+        return false;
+
+    return (
+        a.guid === b.guid &&
+        a.date.begin.getTime() === b.date.begin.getTime() &&
+        a.date.end.getTime() === b.date.end.getTime() &&
+        a.title === b.title &&
+        a.location === b.location &&
+        a.description === b.description &&
+        a.link === b.link &&
+        a.logo.team === b.logo.team &&
+        a.logo.opponent === b.logo.opponent &&
+        a.han === b.han
+    );
+}
+
+function _buildEventsFromJSON(data, han = null) {
+    // Required RSS elements for this to work
+    if (!data)
+        throw new RSSError('no rss data', EVENTS_RSS_SCHEDULE);
+    if (!data.rss)
+        throw new RSSError('no rss node', EVENTS_RSS_SCHEDULE);
+    if (!data.rss.channel)
+        throw new RSSError('no channel nodes', EVENTS_RSS_SCHEDULE);
+
+    const channel = Array.isArray(data.rss.channel)
+        ? data.rss.channel[0]
+        : data.rss.channel;
+
+    // No items just means an empty result
+    if (!channel.item)
+        return [];
+
+    const items = Array.isArray(channel.item) ? channel.item : [channel.item];
+    const events = [];
+    for (const item of items) {
+        try {
+            events.push(Event.fromRSSItem(item));
+        } catch (itemErr) {
+            console.trace('exception thrown when constructing event: %s', itemErr);
+        }
+    }
+
+    return events;
+}
+
+async function _getEventsFromDB() {
+
+}
+async function _getEventsFromRSS(sportName, hanValues = ['H', 'A', 'N']) {
+    const sportID = SPORTS_NAME2ID.get(sportName);
+
+    let responses;
+    {
+        const promises = [];
+        for (const han of hanValues) {
+            debug('fetching events from %s?sport_id=%s&han=%s',
+                EVENTS_RSS_SCHEDULE,
+                sportID,
+                han,
+            );
+            promises.push(
+                rp({
+                    uri: EVENTS_RSS_SCHEDULE,
+                    qs: {
+                        sport_id: sportID,
+                        han: han,
+                    },
+                    headers: {
+                        'User-Agent': USER_AGENT,
+                    },
+                    resolveWithFullResponse: true,
+                }).catch(error => { return (error instanceof Error) ? error : new Error(error) })
+            );
+        }
+        responses = await Promise.all(promises);
+    }
+
+    let jsons = [];
+    {
+        const xml2js_parseString = util.promisify(xml2js.parseString);
+        const promises = [];
+        for (const response of responses) {
+            if (response instanceof Error) {
+                promises.push(Promise.resolve(response));
+            } else {
+                promises.push(
+                    xml2js_parseString(
+                        response.body,
+                        {
+                            async: true,
+                            explicitRoot: true,
+                            explicitCharkey: false,
+                            explicitArray: false,
+                        }
+                    ).catch(error => { return (error instanceof Error) ? error : new Error(error) })
+                );
+            }
+        }
+        jsons = await Promise.all(promises);
+    }
+
+    const events = [];
+    hanValues.forEach((hanValue, hanIdx) => {
+        try {
+            const hanJSON = jsons[hanIdx];
+            if (hanJSON instanceof Error)
+                throw hanJSON;
+
+            if (hanJSON)
+                events.push(..._buildEventsFromJSON(hanJSON, hanValue));
+        } catch (hanErr) {
+            console.trace('exception building events from JSON: %s', hanErr);
+        }
+    });
+
+    return events;
 }
 
 async function _getEvents(sportID, han, sortEvents = true) {
@@ -150,80 +357,28 @@ async function _getEvents(sportID, han, sortEvents = true) {
     let data = await util.promisify(xml2js.parseString)(
         response.body,
         {
+            async: true,
             explicitRoot: true,
             explicitCharkey: false,
             explicitArray: false,
         }
     );
 
-    // Required RSS elements for this to work
-    if (!data)
-        throw new RSSError('no rss data', EVENTS_RSS_SCHEDULE);
-    if (!data.rss)
-        throw new RSSError('no rss node', EVENTS_RSS_SCHEDULE);
-    if (!data.rss.channel)
-        throw new RSSError('no channel nodes', EVENTS_RSS_SCHEDULE);
-
-    const channel = Array.isArray(data.rss.channel)
-        ? data.rss.channel[0]
-        : data.rss.channel;
-
-    // No items just means an empty result
-    if (!channel.item)
-        return [];
-
-    const items = Array.isArray(channel.item) ? channel.item : [channel.item];
-    const events = [];
-    for (const item of items) {
-        try {
-            debug('processing item %v', item);
-
-            let itemValid = true;
-            for (const key of ['ev:startdate', 'ev:enddate', 'title']) {
-                if (!(key in item && item[key])) {
-                    debug('missing required element %s for item.', key);
-                    itemValid = false;
-                }
-            }
-            if (!itemValid)
-                throw new Error('item is invalid');
-
-            let title = item.title.trim();
-            let titleMatch = EVENT_TITLE_RE.exec(title);
-            if (titleMatch)
-                title = titleMatch[1].trim();
-
-            let location = item['ev:location'] || '';
-            for (const [stateName, stateAbbr] of STATE_ABBR2NAME) {
-                const stateMatch = stateAbbr.exec(location);
-                if (stateMatch) {
-                    debug('replacing state abbr %s with %s', stateMatch[1], stateName);
-                    location = location.replace(stateAbbr, stateName);
-                    break;
-                }
-            }
-            // Somtimes the location gets repeated (???). Fix this
-            // case.
-            location = location.replace(/^\s*(.+?)\s*,\s+\1\s*$/, '$1');
-
-            events.push({
-                'date': {
-                    'begin': new Date(item['ev:startdate']),
-                    'end': new Date(item['ev:enddate']),
-                },
-                'title': title,
-                'location': location.trim(),
-            });
-        } catch (itemErr) {
-            console.trace('exception thrown when constructing event: %s', itemErr);
-        }
-    }
-
     // The events are probably returned sorted, but just to make sure...
+    const events = _buildEventsFromJSON(data);
     if (sortEvents)
         events.sort(_compareEvents);
 
     return events;
+}
+
+function _sportNameExpand(value) {
+    if (!value)
+        return SPORTS_NAME2ID.keys();
+    else if (SPORTS_BOTH.has(value))
+        return SPORTS_BOTH.get(value);
+    else
+        return value;
 }
 
 function _sportName2IDs(value) {
@@ -306,6 +461,7 @@ function hasSport(sportName) {
 }
 
 module.exports = {
+    _getEventsFromRSS: _getEventsFromRSS,
     getAllEvents: getAllEvents,
     getNextEvents: getNextEvents,
     hasSport: hasSport,

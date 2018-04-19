@@ -5,6 +5,7 @@
 const fi = require('./fightingillini.js'),
     debug = require('./debug.js')('test_fightingillini');
 
+/*
 fi.getAllEvents()
     .then(events => {
         debug('Events Result: %v', events);
@@ -16,3 +17,10 @@ fi.getNextEvents('TRACK_AND_FIELD')
         debug('Track and Field Result: %v', events);
     })
     .catch(error => console.error('Track and Field Error: %s', error));
+*/
+
+fi._getEventsFromRSS('FOOTBALL')
+    .then(events => {
+        debug('Football Result: %v', events);
+    })
+    .catch(error => console.error('Football Error: %s', error));
