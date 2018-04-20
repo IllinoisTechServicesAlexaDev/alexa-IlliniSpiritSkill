@@ -413,7 +413,7 @@ function _sportNameExpand(value) {
     else if (SPORTS_BOTH.has(value))
         return SPORTS_BOTH.get(value);
     else
-        return value;
+        return [value];
 }
 
 /**
@@ -762,7 +762,7 @@ async function getNextEvents(sportName) {
                 }
             }
 
-            debug('did not fing next event for %s', _name);
+            debug('did not find next event for %s', _name);
             return [_name, null];
         }
         promises.push(_f());
