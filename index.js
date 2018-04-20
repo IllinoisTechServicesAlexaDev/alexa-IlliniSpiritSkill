@@ -189,7 +189,7 @@ const handlers = {
 
         let speechOutput = [];
         for (const [_sportName, _event] of events) {
-            const _sportNameSpeech = SPORTS_NAME2SPEECH.get(_sportName);
+            const _sportNameSpeech = SPORTS_NAME2SPEECH.get(_sportName) || _sportName;
             if (_event) {
                 const _eventBegin = moment.tz(_event.date.begin, APP_TIMEZONE)
                     .format(`[on] dddd, MMMM Do, [at] hh:mm A [${APP_TIMEZONE_NAME}]`);
