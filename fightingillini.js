@@ -285,6 +285,10 @@ class Event {
 Event.debug = _createDebug('fightingillini:Event');
 
 
+/**
+ * Take the result of turning an XML RSS feed into JSON and construct
+ * an array of events form it.
+ */
 function _buildEventsFromJSON(data, sportName, han) {
     // Required RSS elements for this to work
     if (!data)
@@ -315,6 +319,11 @@ function _buildEventsFromJSON(data, sportName, han) {
     return events;
 }
 
+/**
+ * Turn a value of native JavaScript types into a value for the DB.
+ * The typeHint parameter helps in cases when the type might be hard
+ * to automatically determine (sets, Date objects).
+ */
 function _marshalDBValue(value, typeHint = 'S') {
     const valueType = typeof(value);
 
@@ -357,6 +366,9 @@ function _marshalDBValue(value, typeHint = 'S') {
     throw new Error('unknown object type: ' + util.inspect(value));
 }
 
+/**
+ * Expand a sport name into its other names, if any.
+ */
 function _sportNameExpand(value) {
     if (!value)
         return SPORTS_NAME2ID.keys();
@@ -366,6 +378,9 @@ function _sportNameExpand(value) {
         return value;
 }
 
+/**
+ * Turn a value from the DB into native JavaScript types.
+ */
 function _unmarshalDBValue(value) {
     for (const dbType of ['S', 'N', 'B']) {
         if (dbType in value)
@@ -397,6 +412,12 @@ function _unmarshalDBValue(value) {
 }
 
 
+/**
+ * Get all the events for a sport name and set of HAN values from the
+ * DB. The sport name is not expanded, except in the case of ''. When
+ * it is empty then a whole table scan is done, otherwise it uses a
+ * query.
+ */
 async function _getEventsFromDB(sportName, hanValues = null, sortEvents = false) {
     hanValues = hanValues || ['H', 'A', 'N'];
 
@@ -501,10 +522,16 @@ async function _getEventsFromDB_Query(sportName, hanValues, callback) {
     } while (lastEvaluatedKey);
 }
 
+/**
+ * Get all the events for a sport name and set of HAN values from
+ * the RSS feeds. The sportName parameter will not be expanded.
+ */
 async function _getEventsFromRSS(sportName, hanValues = null, sortEvents = false) {
     const sportID = SPORTS_NAME2ID.get(sportName);
     hanValues = hanValues || ['H', 'A', 'N'];
 
+    // Fetch the feeds from the server. This batches together all the
+    // HAN requests in parallel.
     let responses;
     {
         const promises = [];
@@ -531,6 +558,8 @@ async function _getEventsFromRSS(sportName, hanValues = null, sortEvents = false
         responses = await Promise.all(promises);
     }
 
+    // Process the feed responses and convert the XML to a JSON format.
+    // If there was an error above then just pass it along.
     let jsons = [];
     {
         const xml2js_parseString = util.promisify(xml2js.parseString);
@@ -555,6 +584,8 @@ async function _getEventsFromRSS(sportName, hanValues = null, sortEvents = false
         jsons = await Promise.all(promises);
     }
 
+    // Look at each of the HAN results and try to build Event objects
+    // from them.
     const events = [];
     hanValues.forEach((hanValue, hanIdx) => {
         try {
@@ -574,13 +605,24 @@ async function _getEventsFromRSS(sportName, hanValues = null, sortEvents = false
     return events;
 }
 
+/**
+ * Perform a sync between the RSS feeds (master source) and the DB
+ * items.
+ */
 async function _syncDBEvents() {
+    console.group('Synchronizing DB Events');
+
+    // Get all of the events from the RSS feeds. This launches
+    // multiple request at the same time.
     const rssEvents = new Map();
     {
+        console.info('Fetching events from RSS');
+
         const promises = [];
         for (const _name of _sportNameExpand('')) {
             promises.push(_getEventsFromRSS(_name));
         }
+
         const _promiseEvents = await Promise.all(promises);
         for (const _events of _promiseEvents)
             for (const _event of _events)
@@ -588,14 +630,19 @@ async function _syncDBEvents() {
         debug('sync fetched rss events: %v', rssEvents);
     }
 
+    // Get all of the events from the DB.
     const dbEvents = new Map();
     {
+        console.info('Fetching events from the DB');
         const _events = await _getEventsFromDB();
         for (const _event of _events)
             dbEvents.set(_event.guid, _event);
         debug('sync fetched db events: %v', dbEvents);
     }
 
+    // Loop over each set of events and figure out what needs to be
+    // added, updated (same operation as add), and removed. Store
+    // the operations to be performed in the writeOps array.
     const writeOps = [];
     for (const event of rssEvents.values()) {
         if (!dbEvents.has(event.guid) || !Event.isEqual(event, dbEvents.get(event.guid)))
@@ -610,7 +657,11 @@ async function _syncDBEvents() {
             });
     }
 
+    // Send batches of operations to the server. We need to loop
+    // multiple times since the batch size is 25 and any of the batch
+    // operations can have unprocessed items.
     debug('performing sync with writeOps: %v', writeOps);
+    console.info('Performing DB updates');
     while (writeOps.length) {
         let batchWriteOps = writeOps.splice(0, 25);
         while (batchWriteOps.length) {
@@ -626,6 +677,8 @@ async function _syncDBEvents() {
                 batchWriteOps = result.UnprocessedItems[EVENTS_DB_TABLE_NAME];
         }
     }
+
+    console.groupEnd();
 }
 
 /**
@@ -697,3 +750,8 @@ module.exports = {
     getNextEvents: getNextEvents,
     hasSport: hasSport,
 };
+
+if (require.main === module) {
+    console.info('Performing event RSS -> DB syc. This can take awhile depending on table WCU.');
+    _syncDBEvents();
+}
