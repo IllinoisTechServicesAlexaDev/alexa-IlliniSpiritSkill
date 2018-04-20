@@ -190,18 +190,20 @@ const handlers = {
         let speechOutput = [];
         for (const [_sportName, _event] of events) {
             const _sportNameSpeech = SPORTS_NAME2SPEECH.get(_sportName);
-            let _eventOutput = `I wasn't able to find any upcoming events for ${_sportNameSpeech}.`;
             if (_event) {
                 const _eventBegin = moment.tz(_event.date.begin, APP_TIMEZONE)
                     .format(`[on] dddd, MMMM Do, [at] hh:mm A [${APP_TIMEZONE_NAME}]`);
 
-                _eventOutput = `The next ${_sportNameSpeech} event is ${_eventBegin}, ${_event.title}`;
+                let _eventOutput = `The next ${_sportNameSpeech} event is ${_eventBegin}, ${_event.title}`;
                 if (_event.location)
                     _eventOutput = _eventOutput + `, at ${_event.location}`;
                 _eventOutput = _eventOutput + '.';
+                speechOutput.push(_eventOutput);
+            } else if (sportNameValue.id) {
+                // Only output an 'unable to find event' if we aren't
+                // listing all the next events
+                speechOutput.push(`I wasn't able to find any upcoming events for ${_sportNameSpeech}.`)
             }
-
-            speechOutput.push(_eventOutput);
         }
 
         this.response.speak(xmlesc(speechOutput.join(' ')));
