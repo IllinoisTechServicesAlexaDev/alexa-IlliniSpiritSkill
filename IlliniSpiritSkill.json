@@ -1,0 +1,379 @@
+{
+    "interactionModel": {
+        "languageModel": {
+            "invocationName": "illini spirit",
+            "intents": [
+                {
+                    "name": "AMAZON.CancelIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.HelpIntent",
+                    "samples": [
+                        "i forget",
+                        "how do you work",
+                        "what can you say",
+                        "what can i ask",
+                        "what do you do"
+                    ]
+                },
+                {
+                    "name": "AMAZON.StopIntent",
+                    "samples": [
+                        "quit"
+                    ]
+                },
+                {
+                    "name": "SingIntent",
+                    "slots": [],
+                    "samples": [
+                        "raise my spirits",
+                        "raise my spirit",
+                        "sing",
+                        "sing a song",
+                        "sing me a song"
+                    ]
+                },
+                {
+                    "name": "ILLIntent",
+                    "slots": [],
+                    "samples": [
+                        "i.l.l.",
+                        "i l.l."
+                    ]
+                },
+                {
+                    "name": "INIIntent",
+                    "slots": [],
+                    "samples": [
+                        "i n.i.",
+                        "i.n.i."
+                    ]
+                },
+                {
+                    "name": "BloodIntent",
+                    "slots": [],
+                    "samples": [
+                        "illini blood",
+                        "blood",
+                        "what color is blood",
+                        "what color do I bleed",
+                        "what color do you bleed"
+                    ]
+                },
+                {
+                    "name": "NextEventIntent",
+                    "slots": [
+                        {
+                            "name": "sportName",
+                            "type": "varsitySport"
+                        }
+                    ],
+                    "samples": [
+                        "{sportName} matches",
+                        "{sportName} games",
+                        "{sportName} events",
+                        "upcoming {sportName} matches",
+                        "upcoming {sportName} games",
+                        "upcoming {sportName} events",
+                        "upcoming matches",
+                        "upcoming games",
+                        "upcoming events",
+                        "the next match",
+                        "the next game",
+                        "the next event ",
+                        "when's the next match",
+                        "when's the next game",
+                        "when's the next event",
+                        "when's the next {sportName} match",
+                        "when's the next {sportName} game",
+                        "when's the next {sportName} event",
+                        "what's the next {sportName} match",
+                        "what's the next {sportName} game",
+                        "what's the next {sportName} event",
+                        "what's the next match",
+                        "what's the next game",
+                        "what's the next event"
+                    ]
+                }
+            ],
+            "types": [
+                {
+                    "name": "varsitySport",
+                    "values": [
+                        {
+                            "id": "BASKETBALL",
+                            "name": {
+                                "value": "basketball"
+                            }
+                        },
+                        {
+                            "id": "CROSS_COUNTRY",
+                            "name": {
+                                "value": "cross country"
+                            }
+                        },
+                        {
+                            "id": "GOLF",
+                            "name": {
+                                "value": "golf"
+                            }
+                        },
+                        {
+                            "id": "GYMNASTICS",
+                            "name": {
+                                "value": "gymnastics"
+                            }
+                        },
+                        {
+                            "id": "TENNIS",
+                            "name": {
+                                "value": "tennis"
+                            }
+                        },
+                        {
+                            "id": "TRACK_AND_FIELD",
+                            "name": {
+                                "value": "track and field"
+                            }
+                        },
+                        {
+                            "id": "VOLLEYBALL",
+                            "name": {
+                                "value": "volleyball",
+                                "synonyms": [
+                                    "female volleyball",
+                                    "ladies volleyball",
+                                    "girls volleyball",
+                                    "womens volleyball"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "SWIM_AND_DIVE",
+                            "name": {
+                                "value": "swim and dive",
+                                "synonyms": [
+                                    "female diving",
+                                    "female swimming",
+                                    "female swimming and diving",
+                                    "female swim and dive",
+                                    "ladies diving",
+                                    "ladies swimming",
+                                    "girls diving",
+                                    "girls swimming",
+                                    "womens diving",
+                                    "womens swimming",
+                                    "diving",
+                                    "swimming",
+                                    "ladies swimming and diving",
+                                    "girls swimming and diving",
+                                    "womens swimming and diving",
+                                    "swiming and diving",
+                                    "ladies swim and dive",
+                                    "girls swim and dive",
+                                    "womens swim and dive"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "SOCCER",
+                            "name": {
+                                "value": "soccer",
+                                "synonyms": [
+                                    "female soccer",
+                                    "ladies soccer",
+                                    "girls soccer",
+                                    "womens soccer"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "WRESTLING",
+                            "name": {
+                                "value": "wrestling",
+                                "synonyms": [
+                                    "male wrestling",
+                                    "guys wrestling",
+                                    "boys wrestling",
+                                    "mens wrestling"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "WOMENS_TRACK_AND_FIELD",
+                            "name": {
+                                "value": "womens track and field",
+                                "synonyms": [
+                                    "female track and field",
+                                    "ladies track and field",
+                                    "girls track and field"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "MENS_TRACK_AND_FIELD",
+                            "name": {
+                                "value": "mens track and field",
+                                "synonyms": [
+                                    "make track and field",
+                                    "guys track and field",
+                                    "boys track and field"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "WOMENS_TENNIS",
+                            "name": {
+                                "value": "womens tennis",
+                                "synonyms": [
+                                    "female tennis",
+                                    "ladies tennis",
+                                    "girls tennis"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "MENS_TENNIS",
+                            "name": {
+                                "value": "mens tennis",
+                                "synonyms": [
+                                    "male tennis",
+                                    "guys tennis",
+                                    "boys tennis"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "WOMENS_GYMNASTICS",
+                            "name": {
+                                "value": "womens gymnastics",
+                                "synonyms": [
+                                    "female gymnastics",
+                                    "ladies gymnastics",
+                                    "girls gymnastics"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "MENS_GYMNASTICS",
+                            "name": {
+                                "value": "mens gymnastics",
+                                "synonyms": [
+                                    "male gymnastics",
+                                    "guys gymnastics",
+                                    "boys gymnastics"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "WOMENS_GOLF",
+                            "name": {
+                                "value": "womens golf",
+                                "synonyms": [
+                                    "female golf",
+                                    "ladies golf",
+                                    "girls golf"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "MENS_GOLF",
+                            "name": {
+                                "value": "mens golf",
+                                "synonyms": [
+                                    "boys golf",
+                                    "make golf",
+                                    "guys golf"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "FOOTBALL",
+                            "name": {
+                                "value": "football",
+                                "synonyms": [
+                                    "male football",
+                                    "mens football",
+                                    "guys football",
+                                    "boys football"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "WOMENS_CROSS_COUNTRY",
+                            "name": {
+                                "value": "womens cross country",
+                                "synonyms": [
+                                    "female cross country",
+                                    "ladies cross country",
+                                    "girls cross country"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "MENS_CROSS_COUNTRY",
+                            "name": {
+                                "value": "mens cross country",
+                                "synonyms": [
+                                    "male cross country",
+                                    "boys cross country",
+                                    "guys cross country"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "SOFTBALL",
+                            "name": {
+                                "value": "softball",
+                                "synonyms": [
+                                    "female baseball",
+                                    "female softball",
+                                    "womens softball",
+                                    "ladies baseball",
+                                    "girls baseball",
+                                    "ladies softball",
+                                    "girls softball"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "BASEBALL",
+                            "name": {
+                                "value": "baseball",
+                                "synonyms": [
+                                    "male baseball",
+                                    "mens baseball",
+                                    "guys baseball",
+                                    "boys baseball"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "WOMENS_BASKETBALL",
+                            "name": {
+                                "value": "womens basketball",
+                                "synonyms": [
+                                    "female basketball",
+                                    "ladies basketball",
+                                    "girls basketball"
+                                ]
+                            }
+                        },
+                        {
+                            "id": "MENS_BASKETBALL",
+                            "name": {
+                                "value": "mens basketball",
+                                "synonyms": [
+                                    "male basketball",
+                                    "guys basketball",
+                                    "boys basketball"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}
