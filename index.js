@@ -9,10 +9,10 @@ const debug = require('./debug.js')('index'),
     xmlesc = require('xml-escape'),
     Alexa = require('alexa-sdk');
 
-const APP_ID = 'amzn1.ask.skill.ebff67a3-eae9-4452-9a6a-74196ee1f419';
-const APP_DYNAMODB = 'alexa-IlliniSpiritSkill-SessionAttributes';
-const APP_TIMEZONE = 'America/Chicago';
-const APP_TIMEZONE_NAME = 'Central';
+const APP_ID = (process.env.APP_ID || 'amzn1.ask.skill.ebff67a3-eae9-4452-9a6a-74196ee1f419');
+const APP_DYNAMODB = (process.env.APP_DYNAMODB || 'alexa-IlliniSpiritSkill-SessionAttributes');
+const APP_TIMEZONE = (process.env.APP_TIMEZONE || 'America/Chicago');
+const APP_TIMEZONE_NAME = (process.env.APP_TIMEZONE_NAME || 'Central');
 
 const SKILL_NAME = 'Illini Spirit';
 const HELP_MESSAGE = 'Hail Alma Mater. You can say i.l.l. or i.n.i, or, you can ask me to sing, or, you can ask about upcoming events, or, you can say exit... show me your school spirit!';
@@ -47,6 +47,30 @@ const SONGS = [
     Back the team to gain a victory...
     Oskee-wow-wow, Illinois!`),
 ];
+
+// TODO: make this a translation lookup
+const SPORTS_NAME2SPEECH = new Map([
+    ['BASEBALL',                'baseball'],
+    ['FOOTBALL',                'football'],
+    ['MENS_BASKETBALL',         'mens basketball'],
+    ['MENS_CROSS_COUNTRY',      'mens cross country'],
+    ['MENS_GOLF',               'mens golf'],
+    ['MENS_GYMNASTICS',         'mens gymnastics'],
+    ['MENS_TENNIS',             'mens tennis'],
+    ['MENS_TRACK_AND_FIELD',    'mens track and field'],
+    ['SOCCER',                  'soccer'],
+    ['SOFTBALL',                'softball'],
+    ['SWIM_AND_DIVE',           'swim and dive'],
+    ['VOLLEYBALL',              'volleyball'],
+    ['WOMENS_BASKETBALL',       'womens basketball'],
+    ['WOMENS_CROSS_COUNTRY',    'womens cross country'],
+    ['WOMENS_GOLF',             'womens golf'],
+    ['WOMENS_GYMNASTICS',       'womens gymnastics'],
+    ['WOMENS_TENNIS',           'womens tennis'],
+    ['WOMENS_TRACK_AND_FIELD',  'womens track and field'],
+    ['WRESTLING',               'wrestling'],
+]);
+
 
 
 /**
@@ -113,12 +137,12 @@ const handlers = {
         const slots = intent.slots || {};
 
         const sportNameValue = _getResolutionOrValue(slots.sportName) || { name: '', id: null };
-        if (!fightingillini.hasSport(sportNameValue.name)) {
+        if (!fightingillini.hasSport(sportNameValue.id)) {
             this.emit(':tell', xmlesc(`Sorry, I am unable to find a sport named ${sportNameValue.name}`));
             return;
         }
 
-        const events = await fightingillini.getNextEvents(sportNameValue.name);
+        const events = await fightingillini.getNextEvents(sportNameValue.id);
         if (!events.size) {
             this.emit(':tell', xmlesc(`Sorry, I was unable to get events for ${sportNameValue.name}`));
             return;
@@ -126,12 +150,13 @@ const handlers = {
 
         let speechOutput = [];
         for (const [_sportName, _event] of events) {
-            let _eventOutput = `I wasn't able to find any upcoming events for ${_sportName}.`;
+            const _sportNameSpeech = SPORTS_NAME2SPEECH.get(_sportName);
+            let _eventOutput = `I wasn't able to find any upcoming events for ${_sportNameSpeech}.`;
             if (_event) {
                 const _eventBegin = moment.tz(_event.date.begin, APP_TIMEZONE)
                     .format(`[on] dddd, MMMM Do, [at] hh:mm A [${APP_TIMEZONE_NAME}]`);
 
-                _eventOutput = `The next ${_sportName} event is ${_eventBegin}, ${_event.title}`;
+                _eventOutput = `The next ${_sportNameSpeech} event is ${_eventBegin}, ${_event.title}`;
                 if (_event.location)
                     _eventOutput = _eventOutput + `, at ${_event.location}`;
                 _eventOutput = _eventOutput + '.';

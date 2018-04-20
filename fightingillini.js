@@ -16,7 +16,7 @@ const package_json = require('./package.json');
 
 const USER_AGENT = `${package_json.name}/${package_json.version}`;
 
-const EVENTS_DB_TABLE_NAME = 'alexa-IlliniSpiritSkil-FightingIllini';
+const EVENTS_DB_TABLE_NAME = (process.env.EVENTS_DB_TABLE_NAME || 'alexa-IlliniSpiritSkill-FightingIllini-Events');
 const EVENTS_RSS_SCHEDULE = 'http://fightingillini.com/calendar.ashx/calendar.rss';
 const EVENT_TITLE_RE = /^(?:\d+\/\d+\s+(?:\d+:\d+\s+(?:AM|PM)\s+)?)?(?:\[.\]\s+)?(?:University\s+of\s+(?=Illinois))?(.+)$/i;
 
@@ -753,5 +753,7 @@ module.exports = {
 
 if (require.main === module) {
     console.info('Performing event RSS -> DB syc. This can take awhile depending on table WCU.');
-    _syncDBEvents();
+    _syncDBEvents()
+        .then(() => console.info('Sychronization complete'))
+        .catch(error => console.error('Sychronization failed: %s', error));
 }
