@@ -315,7 +315,7 @@ class Event {
     toDBKey() {
         return {
             SportName: _marshalDBValue(this.sportName),
-            DateBegin: _marshalDBValue(this.date.begin, 'N'),
+            GUID: _marshalDBValue(this.guid),
         };
     }
 }
@@ -695,6 +695,9 @@ async function _syncDBEvents() {
             });
     }
 
+    // store this for later
+    const results = writeOps.slice();
+
     // Send batches of operations to the server. We need to loop
     // multiple times since the batch size is 25 and any of the batch
     // operations can have unprocessed items.
@@ -717,6 +720,7 @@ async function _syncDBEvents() {
     }
 
     console.groupEnd();
+    return results;
 }
 
 /**
@@ -778,6 +782,12 @@ function hasSport(sportName) {
     return !sportName || SPORTS_NAME2ID.has(sportName) || SPORTS_BOTH.has(sportName);
 }
 
+function syncDBEventsHandler(event, context, callback) {
+    _syncDBEvents()
+        .then(results => callback(null, results))
+        .catch(error => callback(error));
+}
+
 module.exports = {
     _Event: Event,
     _getEventsFromDB: _getEventsFromDB,
@@ -787,6 +797,7 @@ module.exports = {
     getAllEvents: getAllEvents,
     getNextEvents: getNextEvents,
     hasSport: hasSport,
+    syncDBEventsHandler: syncDBEventsHandler,
 };
 
 if (require.main === module) {
